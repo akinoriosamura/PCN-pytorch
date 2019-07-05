@@ -74,7 +74,7 @@ class PCN2(nn.Module):
         x = x.view(batch_size, -1)
         x = F.relu(self.fc(x), inplace=True)
         cls_prob = F.softmax(self.cls_prob(x), dim=1)
-        rotate = F.softmax(self.cls_prob(x), dim=1)
+        rotate = F.softmax(self.rotate(x), dim=1)
         bbox = self.bbox(x)
         return cls_prob, rotate, bbox
 

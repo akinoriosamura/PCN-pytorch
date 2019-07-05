@@ -8,7 +8,7 @@ from .utils import Window, draw_face
 
 # global settings
 EPS = 1e-5
-minFace_ = 20 * 1.4
+minFace_ = 200 * 1.4
 scale_ = 1.414
 stride_ = 8
 classThreshold_ = [0.37, 0.43, 0.97]
@@ -117,7 +117,7 @@ def NMS(winlist, local:bool, threshold:float):
             # 枠が違いすぎたらIoU計算スキップ
             if local and abs(winlist[i].scale - winlist[j].scale) > EPS:
                 continue
-            if IoU(winlist[i], winlist[j] > threshold):
+            if IoU(winlist[i], winlist[j]) > threshold:
                 flag[j] = 1
     # 被ってない顔枠は無視
     ret = [winlist[i] for i in range(length) if not flag[i]]
@@ -167,7 +167,6 @@ def trans_window(img, imgPad, winlist):
 
 def stage1(img, imgPad, net, thres):
     # 切り捨て除算によりpad分を計算
-    print("start")
     row = (imgPad.shape[0] - img.shape[0]) // 2
     col = (imgPad.shape[1] - img.shape[1]) // 2
     winlist = []
@@ -178,24 +177,21 @@ def stage1(img, imgPad, net, thres):
     curScale = minFace_ / netSize
     img_resized = resize_img(img, curScale)
     # netsizeよりも画像の縦か横が小さくなるまで
-    print("1")
+    
     while min(img_resized.shape[:2]) >= netSize:
         img_resized = preprocess_img(img_resized)
         # net forward
-        import pdb; pdb.set_trace()
         net_input = set_input(img_resized)
-        print("1")
         # TODO: net_inputの確認
-        while torch.no_grad():
+        with torch.no_grad():
             net.eval()
             cls_prob, rotate, bbox = net(net_input)
 
         # w = minFace_
-        print("1")
         w = netSize * curScale
-        # TODO: これ、bboxの間違いじゃね？
-        # TODO: ここら辺もっかい見る
-        for i in range(cls_prob[2]): # cls_prob[2]->height
+        # TODO: もっかい
+        # 全ての顔枠probが閾値以上に関して
+        for i in range(cls_prob.shape[2]): # cls_prob[2]->height
             for j in range(cls_prob.shape[3]): # cls_prob.shape[3]->width
                 if cls_prob[0, 1, i, j].item() > thres:
                     sn = bbox[0, 0, i, j].item()
@@ -211,7 +207,6 @@ def stage1(img, imgPad, net, thres):
                             winlist.append(Window2(rx, ry, rw, rw, 180, curScale, cls_prob[0, 1, i, j].item()))
         img_resized = resize_img(img_resized, scale_)
         curScale = img.shape[0] / img_resized.shape[0]
-        print("end")
     return winlist
 
 def stage2(img, img180, net, thres, dim, winlist):
@@ -267,10 +262,10 @@ def stage2(img, img180, net, thres, dim, winlist):
                     maxRotateIndex = j
             if legal(x, y, img) and legal(x+w-1, y+w-1, img):
                 angle = 0
-                if abs(winlist[i],angle) < EPS:
+                if abs(winlist[i].angle) < EPS:
                     if maxRotateIndex == 0:
                         angle = 90
-                    elif maxRotateIndex == i:
+                    elif maxRotateIndex == 1:
                         angle = 0
                     else:
                         angle = -90
@@ -289,7 +284,6 @@ def stage3(imgPad, img180, img90, imgNeg90, net, thres, dim, winlist):
     length = len(winlist)
     if length == 0:
         return winlist
-    
     datalist = []
     height, width = imgPad.shape[:2]
 
@@ -306,7 +300,7 @@ def stage3(imgPad, img180, img90, imgNeg90, net, thres, dim, winlist):
         else:
             y2 = win.y + win.h - 1
             y = height - 1 - y2
-            datalist.append(preprocess_img(img180[y:y+win.h, win.x:win.x+win.w, dim]))
+            datalist.append(preprocess_img(img180[y:y+win.h, win.x:win.x+win.w, :], dim))
     # network forward
     net_input = set_input(datalist)
     with torch.no_grad():
@@ -356,25 +350,18 @@ def detect(img, imgPad, nets):
     img180 = cv2.flip(imgPad, 0)
     img90 = cv2.transpose(imgPad, 0)
     imgNeg90 = cv2.flip(img90, 0)
-    print("1")
     winlist = stage1(img, imgPad, nets[0], classThreshold_[0])
-    print("1")
     winlist = NMS(winlist, True, nmsThredHold_[0])
-    print("1")
     winlist = stage2(imgPad, img180, nets[1], classThreshold_[1], 24, winlist)
     winlist = NMS(winlist, True, nmsThredHold_[1])
-    print("1")
     winlist = stage3(imgPad, img180, img90, imgNeg90, nets[2], classThreshold_[2], 48, winlist)
     winlist = NMS(winlist, False, nmsThredHold_[2])
-    print("1")
     winlist = deleteFP(winlist)
     return winlist
 
 def pcn_detect(img, nets):
-    print("1")
     imgPad = pad_img(img)
     winlist = detect(img, imgPad, nets)
-    print("1")
     if stable_:
         winlist = smooth_window(winlist)
     return trans_window(img, imgPad, winlist)
