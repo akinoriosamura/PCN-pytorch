@@ -16,8 +16,8 @@ class PCN1(nn.Module):
         self.bbox = nn.Conv2d(128, 3, kernel_size=1, stride=1)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x), inpalce=True)
-        x = F.relu(self.conv2(x), inpalce=True)
+        x = F.relu(self.conv1(x), inplace=True)
+        x = F.relu(self.conv2(x), inplace=True)
         x = F.relu(self.conv3(x), inplace=True)
         x = F.relu(self.conv4(x), inplace=True)
         cls_prob = F.softmax(self.cls_prob(x), dim=1)
@@ -72,7 +72,7 @@ class PCN2(nn.Module):
         x = F.relu(self.mp(x), inplace=True)
         x = F.relu(self.conv3(x), inplace=True)
         x = x.view(batch_size, -1)
-        x = F.relu(self.fc(x), inpalce=True)
+        x = F.relu(self.fc(x), inplace=True)
         cls_prob = F.softmax(self.cls_prob(x), dim=1)
         rotate = F.softmax(self.cls_prob(x), dim=1)
         bbox = self.bbox(x)
@@ -122,7 +122,7 @@ class PCN3(nn.Module):
         batch_size = x.size(0)
         x = self.conv1(x)
         x = F.pad(x, (0, 1, 0, 1))
-        x = F.relu(self.mp1(x), inpalce=True)
+        x = F.relu(self.mp1(x), inplace=True)
 
         x = self.conv2(x)
         x = F.pad(x, (0, 1, 0, 1))
@@ -174,3 +174,5 @@ def load_model():
     pcn2.load_state_dict(torch.load(os.path.join(cwd, 'pth/pcn2_sd.pth')))
     pcn3.load_state_dict(torch.load(os.path.join(cwd, 'pth/pcn3_sd.pth')))
     return pcn1, pcn2, pcn3
+
+# sample##################

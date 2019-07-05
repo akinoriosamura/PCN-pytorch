@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import torch
 
-from .model import load_model
+from .models import load_model
 from .utils import Window, draw_face
 
 # global settings
@@ -167,6 +167,7 @@ def trans_window(img, imgPad, winlist):
 
 def stage1(img, imgPad, net, thres):
     # 切り捨て除算によりpad分を計算
+    print("start")
     row = (imgPad.shape[0] - img.shape[0]) // 2
     col = (imgPad.shape[1] - img.shape[1]) // 2
     winlist = []
@@ -177,16 +178,21 @@ def stage1(img, imgPad, net, thres):
     curScale = minFace_ / netSize
     img_resized = resize_img(img, curScale)
     # netsizeよりも画像の縦か横が小さくなるまで
+    print("1")
     while min(img_resized.shape[:2]) >= netSize:
         img_resized = preprocess_img(img_resized)
         # net forward
+        import pdb; pdb.set_trace()
         net_input = set_input(img_resized)
+        print("1")
+        # TODO: net_inputの確認
         while torch.no_grad():
             net.eval()
             cls_prob, rotate, bbox = net(net_input)
 
         # w = minFace_
-        w = netSize* curScale
+        print("1")
+        w = netSize * curScale
         # TODO: これ、bboxの間違いじゃね？
         # TODO: ここら辺もっかい見る
         for i in range(cls_prob[2]): # cls_prob[2]->height
@@ -205,6 +211,7 @@ def stage1(img, imgPad, net, thres):
                             winlist.append(Window2(rx, ry, rw, rw, 180, curScale, cls_prob[0, 1, i, j].item()))
         img_resized = resize_img(img_resized, scale_)
         curScale = img.shape[0] / img_resized.shape[0]
+        print("end")
     return winlist
 
 def stage2(img, img180, net, thres, dim, winlist):
@@ -349,18 +356,25 @@ def detect(img, imgPad, nets):
     img180 = cv2.flip(imgPad, 0)
     img90 = cv2.transpose(imgPad, 0)
     imgNeg90 = cv2.flip(img90, 0)
+    print("1")
     winlist = stage1(img, imgPad, nets[0], classThreshold_[0])
+    print("1")
     winlist = NMS(winlist, True, nmsThredHold_[0])
+    print("1")
     winlist = stage2(imgPad, img180, nets[1], classThreshold_[1], 24, winlist)
     winlist = NMS(winlist, True, nmsThredHold_[1])
+    print("1")
     winlist = stage3(imgPad, img180, img90, imgNeg90, nets[2], classThreshold_[2], 48, winlist)
     winlist = NMS(winlist, False, nmsThredHold_[2])
+    print("1")
     winlist = deleteFP(winlist)
     return winlist
 
 def pcn_detect(img, nets):
+    print("1")
     imgPad = pad_img(img)
     winlist = detect(img, imgPad, nets)
+    print("1")
     if stable_:
         winlist = smooth_window(winlist)
     return trans_window(img, imgPad, winlist)
@@ -387,3 +401,5 @@ if __name__ == '__main__':
     # save image
     name = os.path.basename(imgpath)
     cv2.imwrite('result/ret_{}'.format(name), img)
+
+    # sample##################
