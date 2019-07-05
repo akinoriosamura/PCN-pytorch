@@ -4,6 +4,7 @@ import numpy as np
 import torch
 
 from .model import load_model
+from .utils import Window, draw_face
 
 # global settings
 EPS = 1e-5
@@ -49,12 +50,14 @@ def pad_img(img:np.array):
     return ret
 
 def legal(x, y, img):
+    # 画像からはみ出てないか
     if 0 <= x < img.shape[1] and 0 <= y < img.shape[0]:
         return True
     else:
         return False
 
 def inside(x, y, rect:Window2):
+    # rect内に含まれてるか
     if rect.x <= x < (rect.x + rect.w) and rect.y <= y < (rect.y + rect.h):
         return True
     else:
@@ -73,10 +76,32 @@ def smooth_angle(a, b):
 prelist = []
 def smooth_window(winlist):
     global prelist
+    for win in winlist:
+        for pwin in prelist:
+            if IoU(win, pwin) > 0.9:
+                win.conf = (win.conf + pwin.conf) / 2
+                win.x = pwin.x
+                win.y = pwin.y
+                win.w = pwin.w
+                win.h = pwin.h
+                win.angle = pwin.angle
+            elif IoU(win, pwin) > 0.6:
+                win.conf = (win.conf + pwin.conf) / 2
+                win.x = (win.x + pwin.x) // 2
+                win.y = (win.y + pwin.y) // 2
+                win.w = (win.w + pwin.w) // 2
+                win.h = (win.h + pwin.h) // 2
+                win.angle = smooth_angle(win.angle, pwin.angle)
+    prelist = winlist
+    return winlist
 
 def IoU(w1:Window2, w2:Window2) -> float:
-    
-
+    # 被り率を計算
+    xOverlap = max(0, min(w1.x + w1.w - 1, w2.x + w2.w - 1) - max(w1.x, w2.x) + 1)
+    yOverlap = max(0, min(w1.y + w1.h - 1, w2.y + w2.h - 1) - max(w1.y, w2.y) + 1)
+    intersection = xOverlap * yOverlap
+    unio = w1.w * w1.h + w2.w * w2.h
+    return intersection / unio
 
 def NMS(winlist, local:bool, threshold:float):
     length = len(winlist)
@@ -84,21 +109,42 @@ def NMS(winlist, local:bool, threshold:float):
         return winlist
     winlist.sort(key=lambda x: x.conf, reverse=True)
     flag = [0] * length
-    for i in range(lenght):
+    # TODO: flag[0]は絶対0なのでは？近い被りを知りたいからいいのか
+    for i in range(length):
         if flag[i]:
             continue
         for j in range(i+1, length):
-            # 
+            # 枠が違いすぎたらIoU計算スキップ
             if local and abs(winlist[i].scale - winlist[j].scale) > EPS:
                 continue
             if IoU(winlist[i], winlist[j] > threshold):
                 flag[j] = 1
-            
+    # 被ってない顔枠は無視
+    ret = [winlist[i] for i in range(length) if not flag[i]]
+    return ret
+
+def deleteFP(winlist):
+    # 枠が被って重複してるやつを削除
+    length = len(winlist)
+    if length == 0:
+        return winlist
+    winlist.sort(key=lambda x: x.conf, reverse=True)
+    flag = [0] * length
+    for i in range(length):
+        if flag[i]:
+            continue
+        for j in range(i+1, length):
+            win = winlist[j]
+            # iがjの中に含まれていればjをチェック
+            if inside(win.x, win.y, winlist[i]) and inside(win.x + win.w - 1, win.y + win.h - 1, winlist[i]):
+                flag[j] = 1
+    ret = [winlist[i] for i in range(length) if not flag[i]]
+    return ret
 
 def set_input(img):
     if type(img) == list:
-        # change from list to numpy
-        # 0次元に新次元追加のつもり？？なってないけど
+        # stage2の顔枠画像listをnumpy化？
+        # stackの意味あるか？？
         # TODO: listだった場合のimg size確認
         img = np.stack(img, axis=0)
     else:
@@ -107,6 +153,17 @@ def set_input(img):
     # [b, h, w, c] -> [b, c, h, w]
     img = img.transpose((0, 3, 1, 2))
     return torch.FloatTensor(img)
+
+def trans_window(img, imgPad, winlist):
+    # TODO: どういうことだ
+    """transfer window2 to window1 in winlist"""
+    row = (imgPad.shape[0] - img.shape[0]) // 2
+    col = (imgPad.shape[1] - img.shape[1]) // 2
+    ret = list()
+    for win in winlist:
+        if win.w > 0 and win.h > 0:
+            ret.append(Window(win.x-col, win.y-row, win.w, win.angle, win.conf))
+    return ret
 
 def stage1(img, imgPad, net, thres):
     # 切り捨て除算によりpad分を計算
@@ -147,10 +204,144 @@ def stage1(img, imgPad, net, thres):
                         else:
                             winlist.append(Window2(rx, ry, rw, rw, 180, curScale, cls_prob[0, 1, i, j].item()))
         img_resized = resize_img(img_resized, scale_)
-        curScale = img.shape[0] / img_resized/shape[0]
+        curScale = img.shape[0] / img_resized.shape[0]
     return winlist
 
-def stage2(img, img180, net, thres, dim, winlist)
+def stage2(img, img180, net, thres, dim, winlist):
+    length = len(winlist)
+    if length == 0:
+        return winlist
+    datalist = []
+    height = img.shape[0]
+    for win in winlist:
+        # TODO: 角度小さすぎると？？なに？？
+        if abs(win.angle) < EPS:
+            # 顔枠を抽出してresizeしてdatalistに追加
+            datalist.append(preprocess_img(img[win.y:win.y+win.h, win.x:win.x+win.w, :], dim))
+        else:
+            y2 = win.y + win.h - 1
+            # 画像のtopから枠のtopまで
+            y = height - 1 - y2
+            # 反転顔枠のピクセル抽出
+            datalist.append(preprocess_img(img180[y:y+win.h, win.x:win.x+win.w, :], dim))
+    # net forward
+    net_input = set_input(datalist)
+    with torch.no_grad():
+        net.eval()
+        # 顔枠切り抜き画像で検出
+        cls_prob, rotate, bbox = net(net_input)
+
+    ret = []
+    for i in range(length):
+        if cls_prob[i, 1].item() > thres:
+            # 検出顔枠
+            sn = bbox[i, 0].item()
+            xn = bbox[i, 1].item()
+            yn = bbox[i, 2].item()
+            # インプット顔枠
+            cropX = winlist[i].x
+            cropY = winlist[i].y
+            cropW = winlist[i].w
+            # TODO: 角度小さすぎると？？なにこの処理も？？
+            if abs(winlist[i].angle) > EPS:
+                cropY = height - 1 - (cropY + cropW - 1)
+            # TODO: 掛け算？？後の処理もわからん
+            w = int(sn * cropW)
+            x = int(cropX - 0.5 * sn * cropW + cropW * sn * xn + 0.5 * cropW)
+            y = int(cropY - 0.5 * sn * cropW + cropW * sn * yn + 0.5 * cropW)
+            maxRotateScore = 0
+            maxRotateIndex = 0
+            # rotate = [-90, 0, 90]のprob
+            # 一番確率高い角度インデックスを出力
+            # 関数あるでしょ
+            for j in range(3):
+                if rotate[i, j].item() > maxRotateScore:
+                    maxRotateScore = rotate[i, j].item()
+                    maxRotateIndex = j
+            if legal(x, y, img) and legal(x+w-1, y+w-1, img):
+                angle = 0
+                if abs(winlist[i],angle) < EPS:
+                    if maxRotateIndex == 0:
+                        angle = 90
+                    elif maxRotateIndex == i:
+                        angle = 0
+                    else:
+                        angle = -90
+                    ret.append(Window2(x, y, w, w, angle, winlist[i].scale, cls_prob[i, 1].item()))
+                else:
+                    if maxRotateIndex == 0:
+                        angle = 90
+                    elif maxRotateIndex == 1:
+                        angle = 180
+                    else:
+                        angle = -90
+                    ret.append(Window2(x, height-1-(y+w-1), w, w, angle, winlist[i].scale, cls_prob[i, 1].item()))
+    return ret
+
+def stage3(imgPad, img180, img90, imgNeg90, net, thres, dim, winlist):
+    length = len(winlist)
+    if length == 0:
+        return winlist
+    
+    datalist = []
+    height, width = imgPad.shape[:2]
+
+    for win in winlist:
+        # TODO: 確認
+        if abs(win.angle) < EPS:
+            datalist.append(preprocess_img(imgPad[win.y:win.y+win.h, win.x:win.x+win.w, :], dim))
+        elif abs(win.angle - 90) < EPS:
+            datalist.append(preprocess_img(img90[win.x:win.x+win.w, win.y:win.y+win.h, :], dim))
+        elif abs(win.angle + 90) < EPS:
+            x = win.y
+            y = width - 1 - (win.x + win.w - 1)
+            datalist.append(preprocess_img(imgNeg90[y:y+win.h, x:x+win.w, :], dim))
+        else:
+            y2 = win.y + win.h - 1
+            y = height - 1 - y2
+            datalist.append(preprocess_img(img180[y:y+win.h, win.x:win.x+win.w, dim]))
+    # network forward
+    net_input = set_input(datalist)
+    with torch.no_grad():
+        net.eval()
+        cls_prob, rotate, bbox = net(net_input)
+
+    ret = []
+    for i in range(length):
+        if cls_prob[i, 1].item() > thres:
+            sn = bbox[i, 0].item()
+            xn = bbox[i, 1].item()
+            yn = bbox[i, 2].item()
+            cropX = winlist[i].x
+            cropY = winlist[i].y
+            cropW = winlist[i].w
+            img_tmp = imgPad
+            if abs(winlist[i].angle - 180) < EPS:
+                cropY = height - 1 - (cropY + cropW - 1)
+                img_tmp = img180
+            elif abs(winlist[i].angle - 90) < EPS:
+                cropX, cropY = cropY, cropX
+                img_tmp = img90
+            elif abs(winlist[i].angle + 90) < EPS:
+                cropX = winlist[i].y
+                cropY = width -1 - (winlist[i].x + winlist[i].w - 1)
+                img_tmp = imgNeg90
+
+            w = int(sn * cropW)
+            x = int(cropX - 0.5 * sn * cropW + cropW * sn * xn + 0.5 * cropW)
+            y = int(cropY - 0.5 * sn * cropW + cropW * sn * yn + 0.5 * cropW)
+            angle = angleRange_ * rotate[i, 0].item()
+            if legal(x, y, img_tmp) and legal(x+w-1, y+w-1, img_tmp):
+                if abs(winlist[i].angle) < EPS:
+                    ret.append(Window2(x, y, w, w, angle, winlist[i].scale, cls_prob[i, 1].item()))
+                elif abs(winlist[i].angle - 180) < EPS:
+                    ret.append(Window2(x, height-1-(y+w-1), w, w, 180-angle, winlist[i].scale, cls_prob[i, 1].item()))
+                elif abs(winlist[i].angle - 90) < EPS:
+                    ret.append(Window2(y, x, w, w, 90-angle, winlist[i].scale, cls_prob[i, 1].item()))
+                else:
+                    ret.append(Window2(width-y-w, x, w, w, -90+angle, winlist[i].scale, cls_prob[i, 1].item()))
+    return ret
+
 
 
 
@@ -160,12 +351,19 @@ def detect(img, imgPad, nets):
     imgNeg90 = cv2.flip(img90, 0)
     winlist = stage1(img, imgPad, nets[0], classThreshold_[0])
     winlist = NMS(winlist, True, nmsThredHold_[0])
-
+    winlist = stage2(imgPad, img180, nets[1], classThreshold_[1], 24, winlist)
+    winlist = NMS(winlist, True, nmsThredHold_[1])
+    winlist = stage3(imgPad, img180, img90, imgNeg90, nets[2], classThreshold_[2], 48, winlist)
+    winlist = NMS(winlist, False, nmsThredHold_[2])
+    winlist = deleteFP(winlist)
+    return winlist
 
 def pcn_detect(img, nets):
     imgPad = pad_img(img)
     winlist = detect(img, imgPad, nets)
-
+    if stable_:
+        winlist = smooth_window(winlist)
+    return trans_window(img, imgPad, winlist)
 
 if __name__ == '__main__':
     import sys
@@ -179,3 +377,13 @@ if __name__ == '__main__':
     nets = load_model()
     img = cv2.imread(imgpath)
     faces = pcn_detect(img, nets)
+    # draw image
+    for face in faces:
+        draw_face(img, face)
+    # show image
+    cv2.imshow("pytorch-PCN", img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    # save image
+    name = os.path.basename(imgpath)
+    cv2.imwrite('result/ret_{}'.format(name), img)

@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -127,9 +128,9 @@ class PCN3(nn.Module):
         x = F.pad(x, (0, 1, 0, 1))
         x = F.relu(self.mp1(x), inplace=True)
 
-        x = conv3(x)
+        x = self.conv3(x)
         x = F.relu(self.mp2(x), inplace=True)
-        x = FF.relu(self.conv4(x), inplace=True)
+        x = F.relu(self.conv4(x), inplace=True)
         x = x.view(batch_size, -1)
         x = F.relu(self.fc(x), inplace=True)
         cls_prob = F.softmax(self.cls_prob(x), dim=1)
@@ -166,10 +167,8 @@ class PCN3(nn.Module):
 # bbox_reg_3                  	 (3, 192) (3,)
 # rotate_reg_3                	 (1, 192) (1,)
 
-import os
-
 def load_model():
-    cwd = os,path.dirname(__file__)
+    cwd = os.path.dirname(__file__)
     pcn1, pcn2, pcn3 = PCN1(), PCN2(), PCN3()
     pcn1.load_state_dict(torch.load(os.path.join(cwd, 'pth/pcn1_sd.pth')))
     pcn2.load_state_dict(torch.load(os.path.join(cwd, 'pth/pcn2_sd.pth')))
