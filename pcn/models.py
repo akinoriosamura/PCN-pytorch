@@ -3,10 +3,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+def weight_init(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+        nn.init.xavier_uniform(m.weight.data)
+        nn.init(constant(m.bias, 0.1))
+
 class PCN1(nn.Module):
 
     def __init__(self):
         super().__init__()
+        self.is_train =  is_train
+        self.use_cuda = use_cuda
+
+        # initialize model
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=2, dilation=1)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=2)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=2)
@@ -14,6 +24,9 @@ class PCN1(nn.Module):
         self.rotate = nn.Conv2d(128, 2, kernel_size=1, stride=1)
         self.cls_prob = nn.Conv2d(128, 2, kernel_size=1, stride=1)
         self.bbox = nn.Conv2d(128, 3, kernel_size=1, stride=1)
+
+        # weight initiation with xavier
+        self.apply(weight_init)
 
     def forward(self, x):
         x = F.relu(self.conv1(x), inplace=True)
@@ -51,8 +64,12 @@ class PCN1(nn.Module):
 
 class PCN2(nn.Module):
 
-    def __init__(self):
+    def __init__(self, is_train=False, use_cuda=True):
         super().__init__()
+        self.is_train =  is_train
+        self.use_cuda = use_cuda
+
+        # initialize model
         self.conv1 = nn.Conv2d(3, 20, kernel_size=3, stride=1)
         self.conv2 = nn.Conv2d(20, 40, kernel_size=3, stride=1)
         self.conv3 = nn.Conv2d(40, 70, kernel_size=2, stride=1)
@@ -61,6 +78,9 @@ class PCN2(nn.Module):
         self.cls_prob = nn.Linear(140, 2)
         self.bbox = nn.Linear(140, 3)
         self.mp = nn.MaxPool2d(kernel_size=3, stride=2)
+
+        # weight initiation with xavier
+        self.apply(weight_init)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -107,6 +127,10 @@ class PCN2(nn.Module):
 class PCN3(nn.Module):
     def __init__(self):
         super().__init__()
+        self.is_train =  is_train
+        self.use_cuda = use_cuda
+
+        # initialize model
         self.conv1 = nn.Conv2d(3, 24, kernel_size=3, stride=1)
         self.conv2 = nn.Conv2d(24, 48, kernel_size=3, stride=1)
         self.conv3 = nn.Conv2d(48, 96, kernel_size=3, stride=1)
@@ -117,6 +141,9 @@ class PCN3(nn.Module):
         self.rotate = nn.Linear(192, 1)
         self.mp1 = nn.MaxPool2d(kernel_size=3, stride=2)
         self.mp2 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # weight initiation with xavier
+        self.apply(weight_init)
 
     def forward(self, x):
         batch_size = x.size(0)

@@ -1,7 +1,7 @@
-from mtcnn.core.image_reader import TrainImageReader
+from pcn.image_reader import TrainImageReader
 import datetime
 import os
-from mtcnn.core.models import PNet,RNet,ONet,LossFn
+from pcn.models import PCN1,PCN2,PCN3,LossFn
 import torch
 from torch.autograd import Variable
 import mtcnn.core.image_tools as image_tools
@@ -27,14 +27,14 @@ def compute_accuracy(prob_cls, gt_cls):
     return torch.div(torch.mul(torch.sum(right_ones),float(1.0)),float(size))  ## divided by zero meaning that your gt_labels are all negative, landmark or part
 
 
-def train_pnet(model_store_path, end_epoch,imdb,
+def pcn1(model_store_path, end_epoch,imdb,
               batch_size,frequent=10,base_lr=0.01,use_cuda=True):
 
     if not os.path.exists(model_store_path):
         os.makedirs(model_store_path)
 
     lossfn = LossFn()
-    net = PNet(is_train=True, use_cuda=use_cuda)
+    net = PCN1(is_train=True, use_cuda=use_cuda)
     net.train()
 
     if use_cuda:
@@ -64,11 +64,12 @@ def train_pnet(model_store_path, end_epoch,imdb,
                 gt_bbox = gt_bbox.cuda()
                 # gt_landmark = gt_landmark.cuda()
 
-            cls_pred, box_offset_pred = net(im_tensor)
+            cls_pred, rotate, bbox = net(im_tensor)
+            # cls_pred, box_offset_pred = net(im_tensor)
             # all_loss, cls_loss, offset_loss = lossfn.loss(gt_label=label_y,gt_offset=bbox_y, pred_label=cls_pred, pred_offset=box_offset_pred)
 
             cls_loss = lossfn.cls_loss(gt_label,cls_pred)
-            box_offset_loss = lossfn.box_loss(gt_label,gt_bbox,box_offset_pred)
+            box_offset_loss = lossfn.box_loss(gt_label,gt_bbox,bbox)
             # landmark_loss = lossfn.landmark_loss(gt_label,gt_landmark,landmark_offset_pred)
 
             all_loss = cls_loss*1.0+box_offset_loss*0.5
@@ -94,7 +95,7 @@ def train_pnet(model_store_path, end_epoch,imdb,
 
 
 
-def train_rnet(model_store_path, end_epoch,imdb,
+def pcn2(model_store_path, end_epoch,imdb,
               batch_size,frequent=50,base_lr=0.01,use_cuda=True):
 
     if not os.path.exists(model_store_path):
@@ -159,7 +160,7 @@ def train_rnet(model_store_path, end_epoch,imdb,
         torch.save(net, os.path.join(model_store_path,"rnet_epoch_model_%d.pkl" % cur_epoch))
 
 
-def train_onet(model_store_path, end_epoch,imdb,
+def pcn3(model_store_path, end_epoch,imdb,
               batch_size,frequent=50,base_lr=0.01,use_cuda=True):
 
     if not os.path.exists(model_store_path):
