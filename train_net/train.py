@@ -27,7 +27,7 @@ def compute_accuracy(prob_cls, gt_cls):
     return torch.div(torch.mul(torch.sum(right_ones),float(1.0)),float(size))  ## divided by zero meaning that your gt_labels are all negative, landmark or part
 
 
-def pcn1(model_store_path, end_epoch,imdb,
+def pcn1(model_store_path, end_epoch, annotation_file,
               batch_size,frequent=10,base_lr=0.01,use_cuda=True):
 
     if not os.path.exists(model_store_path):
@@ -41,40 +41,45 @@ def pcn1(model_store_path, end_epoch,imdb,
         net.cuda()
     optimizer = torch.optim.Adam(net.parameters(), lr=base_lr)
 
-    train_data=TrainImageReader(imdb,12,batch_size,shuffle=True)
+    # preprocess for dataset
+    annotation_file = annotation_file
+    assert os.path.exists(annotation_file), 'Path does not exist: {}'.format(self.annotation_file)
+    annotations = []
+    with open(annotation_file, 'r') as f:
+        annotations_set = f.readlines()
+    annotations = [annotation.rstrip().split(" ") for annotation in annotations_set]
+
+    # get dataset applyin transform
+    data_transform = transforms.Compose([
+        Rescale((224, 224)),
+        ToTensor()
+    ])
+    face_dataset = FaceDetectorDataset(annotations, data_transform)
+
+    dataloader = DataLoader(face_dataset, batch_size=2, shuffle=True)
 
     frequent = 10
     for cur_epoch in range(1,end_epoch+1):
-        train_data.reset() # shuffle
+        # train_data.reset() # shuffle
 
-        for batch_idx,(image,(gt_label,gt_bbox,gt_landmark))in enumerate(train_data):
-
-            im_tensor = [ image_tools.convert_image_to_tensor(image[i,:,:,:]) for i in range(image.shape[0]) ]
-            im_tensor = torch.stack(im_tensor)
-
+        for batch_idx,(image, gt_bbox)in enumerate(dataloader):
             im_tensor = Variable(im_tensor)
-            gt_label = Variable(torch.from_numpy(gt_label).float())
-
-            gt_bbox = Variable(torch.from_numpy(gt_bbox).float())
-            # gt_landmark = Variable(torch.from_numpy(gt_landmark).float())
+            gt_bbox = Variable(gt_bbox)
 
             if use_cuda:
                 im_tensor = im_tensor.cuda()
-                gt_label = gt_label.cuda()
                 gt_bbox = gt_bbox.cuda()
-                # gt_landmark = gt_landmark.cuda()
 
             cls_pred, rotate, bbox = net(im_tensor)
             # cls_pred, box_offset_pred = net(im_tensor)
             # all_loss, cls_loss, offset_loss = lossfn.loss(gt_label=label_y,gt_offset=bbox_y, pred_label=cls_pred, pred_offset=box_offset_pred)
 
-            cls_loss = lossfn.cls_loss(gt_label,cls_pred)
-            box_offset_loss = lossfn.box_loss(gt_label,gt_bbox,bbox)
-            # landmark_loss = lossfn.landmark_loss(gt_label,gt_landmark,landmark_offset_pred)
+            cls_loss = lossfn.cls_loss(gt_label, cls_pred)
+            box_offset_loss = lossfn.box_loss(gt_label, gt_bbox, bbox)
 
             all_loss = cls_loss*1.0+box_offset_loss*0.5
 
-            if batch_idx %frequent==0:
+            if batch_idx % frequent==0:
                 accuracy=compute_accuracy(cls_pred,gt_label)
 
                 show1 = accuracy.data.cpu().numpy()

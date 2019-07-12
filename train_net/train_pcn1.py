@@ -1,29 +1,26 @@
 import argparse
 import sys
 import os
-sys.path.append(os.getcwd())
-from mtcnn.core.imagedb import ImageDB
-from mtcnn.train_net.train import pcn1
-import mtcnn.config as config
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
 
-# [file name bb(1, 4) bb(1, 4) ..., ...]
-annotation_file = './anno_store/anno_train.txt'
-model_store_path = './model_store'
+from data_loador import FaceDetectorDataset
+
+annotation_file = './dataset/face_detection/WIDERFACE/anno_train.txt'
+model_store_path = './saved_models'
 end_epoch = 10
+# show time of tranining process for debug
 frequent = 200
 lr = 0.01
 batch_size = 512
-use_cuda = True
+use_cuda = False
 
 
 def train_net(annotation_file, model_store_path,
                 end_epoch=16, frequent=200, lr=0.01, batch_size=128, use_cuda=False):
 
-    imagedb = ImageDB(annotation_file)
-    gt_imdb = imagedb.load_imdb()
-    gt_imdb = imagedb.append_flipped_images(gt_imdb)
-    # gt_imdb: 
-    pcn1(model_store_path=model_store_path, end_epoch=end_epoch, imdb=gt_imdb, batch_size=batch_size, frequent=frequent, base_lr=lr, use_cuda=use_cuda)
+    pcn1(model_store_path=model_store_path, end_epoch=end_epoch, annotation_file=annotation_file, batch_size=batch_size, frequent=frequent, base_lr=lr, use_cuda=use_cuda)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train PNet',
@@ -53,8 +50,6 @@ if __name__ == '__main__':
     # args = parse_args()
     print('train Pnet argument:')
     # print(args)
-
-
 
     train_net(annotation_file, model_store_path,
                 end_epoch, frequent, lr, batch_size, use_cuda)
