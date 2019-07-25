@@ -8,14 +8,14 @@ import cv2
 import os
 sys.path.append(os.getcwd())
 import numpy as np
-from mtcnn.data_preprocess.utils import IoU
+from process_data.utils import IoU
 
 prefix = ''
-anno_file = "./anno_store/anno_train.txt"
-im_dir = "./data_set/face_detection/WIDERFACE/WIDER_train/images"
-pos_save_dir = "./data_set/train/12/positive"
-part_save_dir = "./data_set/train/12/part"
-neg_save_dir = './data_set/train/12/negative'
+anno_file = "./dataset/anno_store/anno_train.txt"
+im_dir = "./dataset/face_detection/WIDERFACE/WIDER_train/images"
+pos_save_dir = "./dataset/train/12/positive"
+part_save_dir = "./dataset/train/12/part"
+neg_save_dir = './dataset/train/12/negative'
 
 if not os.path.exists(pos_save_dir):
     os.mkdir(pos_save_dir)
@@ -25,9 +25,9 @@ if not os.path.exists(neg_save_dir):
     os.mkdir(neg_save_dir)
 
 # store labels of positive, negative, part images
-f1 = open(os.path.join('./anno_store', 'pos_12.txt'), 'w')
-f2 = open(os.path.join('./anno_store', 'neg_12.txt'), 'w')
-f3 = open(os.path.join('./anno_store', 'part_12.txt'), 'w')
+f1 = open(os.path.join('./dataset/anno_store', 'pos_12.txt'), 'w')
+f2 = open(os.path.join('./dataset/anno_store', 'neg_12.txt'), 'w')
+f3 = open(os.path.join('./dataset/anno_store', 'part_12.txt'), 'w')
 
 # anno_file: store labels of the wider face training data
 with open(anno_file, 'r') as f:
@@ -40,9 +40,13 @@ n_idx = 0 # negative
 d_idx = 0 # dont care
 idx = 0
 box_idx = 0
+
+img_size = 12
+
 for annotation in annotations:
     annotation = annotation.strip().split(' ')
-    im_path = os.path.join(prefix, annotation[0])
+    # im_path = os.path.join(prefix, annotation[0])
+    im_path = annotation[0]
     print(im_path)
     bbox = list(map(float, annotation[1:]))
     boxes = np.array(bbox, dtype=np.int32).reshape(-1, 4)
@@ -54,16 +58,17 @@ for annotation in annotations:
     height, width, channel = img.shape
 
     neg_num = 0
+    # 一枚の画像につき、50setのnegative ラベルを作成。IoU0.3以下ならnegativeデータとして保存。
     while neg_num < 50:
-        size = np.random.randint(12, min(width, height) / 2)
+        size = np.random.randint(img_size, min(width, height) / 2)
         nx = np.random.randint(0, width - size)
         ny = np.random.randint(0, height - size)
-        crop_box = np.array([nx, ny, nx + size, ny + size])
+        crop_box = np.array([nx, ny, size, size])
 
         Iou = IoU(crop_box, boxes)
 
         cropped_im = img[ny: ny + size, nx: nx + size, :]
-        resized_im = cv2.resize(cropped_im, (12, 12), interpolation=cv2.INTER_LINEAR)
+        resized_im = cv2.resize(cropped_im, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
 
         if np.max(Iou) < 0.3:
             # Iou with all gts must below 0.3
@@ -74,12 +79,13 @@ for annotation in annotations:
             neg_num += 1
 
     for box in boxes:
-        # box (x_left, y_top, x_right, y_bottom)
-        x1, y1, x2, y2 = box
+        # box (x_left, y_top, w, h)
+        x1, y1, w, h = box
+        x2 = x1 + w
+        y2 = y1 + h
+        # x1, y1, x2, y2 = box
         # w = x2 - x1 + 1
         # h = y2 - y1 + 1
-        w = x2 - x1 + 1
-        h = y2 - y1 + 1
 
         # ignore small faces
         # in case the ground truth boxes of small faces are not accurate
@@ -88,7 +94,7 @@ for annotation in annotations:
 
         # generate negative examples that have overlap with gt
         for i in range(5):
-            size = np.random.randint(12, min(width, height) / 2)
+            size = np.random.randint(img_size, min(width, height) / 2)
             # delta_x and delta_y are offsets of (x1, y1)
 
             delta_x = np.random.randint(max(-size, -x1), w)
@@ -98,11 +104,11 @@ for annotation in annotations:
 
             if nx1 + size > width or ny1 + size > height:
                 continue
-            crop_box = np.array([nx1, ny1, nx1 + size, ny1 + size])
+            crop_box = np.array([nx1, ny1, size, size])
             Iou = IoU(crop_box, boxes)
 
             cropped_im = img[ny1: ny1 + size, nx1: nx1 + size, :]
-            resized_im = cv2.resize(cropped_im, (12, 12), interpolation=cv2.INTER_LINEAR)
+            resized_im = cv2.resize(cropped_im, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
 
             if np.max(Iou) < 0.3:
                 # Iou with all gts must below 0.3
@@ -126,30 +132,50 @@ for annotation in annotations:
 
             if nx2 > width or ny2 > height:
                 continue
-            crop_box = np.array([nx1, ny1, nx2, ny2])
+            crop_box = np.array([nx1, ny1, size, size])
 
-            offset_x1 = (x1 - nx1) / float(size)
-            offset_y1 = (y1 - ny1) / float(size)
-            offset_x2 = (x2 - nx2) / float(size)
-            offset_y2 = (y2 - ny2) / float(size)
+            # offset_x1 = (x1 - nx1) / float(size)
+            offset_x1 = nx1 
+            _size / float(size)
+            # offset_y1 = (y1 - ny1) / float(size)
+            offset_y1 = ny1 if y1<ny1 else y1
+            offset_y1 *= img_size / float(size)
+            # offset_x2 = (x2 - nx2) / float(size)
+            offset_x2 = x2 if x2<nx2 else nx2
+            offset_x2 *= img_size / float(size)
+            # offset_y2 = (y2 - ny2) / float(size)
+            offset_y2 = y2 if y2<ny2 else ny2
+            offset_y2 *= img_size / float(size)
+            offset_w = offset_x2 - offset_x1
+            offset_h = offset_y2 - offset_y1
+
 
             cropped_im = img[int(ny1): int(ny2), int(nx1): int(nx2), :]
-            resized_im = cv2.resize(cropped_im, (12, 12), interpolation=cv2.INTER_LINEAR)
+            resized_im = cv2.resize(cropped_im, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
 
             box_ = box.reshape(1, -1)
             if IoU(crop_box, box_) >= 0.65:
+                # cv2.rectangle(img,(int(x1),int(y1)),(int(x2),int(y2)),(200,0,0),2) 
+                # cv2.imshow('face detector', img)
+                import pdb; pdb.set_trace()
+                
+                cv2.rectangle(resized_im,(int(offset_x1),int(offset_y1)),(int(offset_x2),int(offset_y2)),(200,0,0),2) 
+                cv2.imshow('face detector', resized_im)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                import pdb; pdb.set_trace()
+
                 save_file = os.path.join(pos_save_dir, "%s.jpg" % p_idx)
-                f1.write(save_file + ' 1 %.2f %.2f %.2f %.2f\n' % (offset_x1, offset_y1, offset_x2, offset_y2))
+                f1.write(save_file + ' 1 %.2f %.2f %.2f %.2f\n' % (offset_x1, offset_y1, offset_w, offset_h))
                 cv2.imwrite(save_file, resized_im)
                 p_idx += 1
             elif IoU(crop_box, box_) >= 0.4:
                 save_file = os.path.join(part_save_dir, "%s.jpg" % d_idx)
-                f3.write(save_file + ' -1 %.2f %.2f %.2f %.2f\n' % (offset_x1, offset_y1, offset_x2, offset_y2))
+                f3.write(save_file + ' -1 %.2f %.2f %.2f %.2f\n' % (offset_x1, offset_y1, offset_w, offset_h))
                 cv2.imwrite(save_file, resized_im)
                 d_idx += 1
         box_idx += 1
         print("%s images done, pos: %s part: %s neg: %s" % (idx, p_idx, d_idx, n_idx))
-    import pdb; pdb.set_trace()
 
 f1.close()
 f2.close()
