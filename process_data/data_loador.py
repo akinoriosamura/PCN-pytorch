@@ -2,16 +2,17 @@ import cv2
 import numpy as np
 from torch.utils.data import Dataset
 
-class FaceDetectorDataset(Dataset):
+class PCNDetectorDataset(Dataset):
     """
     Face detector dataset processor
     params:
         annotations: [ファイルパス, bbs]の行列
-            - [
+            - imgpath: [
                 ['file path', 2, 24, 55, 466, ...], 
                 [], 
                 ...
                 ]
+            - gt_cls: (-1, 0, 1)
             - bbs: [[x1, y1, w, h], ...]
         transform: transform instance
             - batch を取るために、transformでrescaleは必要
@@ -27,9 +28,10 @@ class FaceDetectorDataset(Dataset):
         annotation = self.annotations[idx]
         img_name = annotation[0]
         image = cv2.imread(img_name)
-        bbs = np.array([annotation[i:i+4] for i in range(1, len(annotation), 4)])
+        gt_cls = np.array([annotation[1]])
+        bbs = np.array([annotation[i:i+4] for i in range(2, len(annotation), 4)])
         bbs = bbs.astype(np.float)
-        sample = {'image': image, 'bbs': bbs}
+        sample = {'image': image, 'gt_cls': gt_cls, 'bbs': bbs, 'theta': 0}
 
         if self.transform:
             sample = self.transform(sample)

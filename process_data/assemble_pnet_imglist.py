@@ -18,3 +18,4 @@ if __name__ == '__main__':
 
     chose_count = assemble.assemble_data(imglist_filename ,anno_list)
     print("PNet train annotation result file path:%s" % imglist_filename)
+    print("data num: ", chose_count)

@@ -49,6 +49,9 @@ for annotation in annotations:
     im_path = annotation[0]
     print(im_path)
     bbox = list(map(float, annotation[1:]))
+    # 画像に直立顔ラベルがない場合スキップ
+    if bbox == []:
+        continue
     boxes = np.array(bbox, dtype=np.int32).reshape(-1, 4)
     img = cv2.imread(im_path)
     idx += 1
@@ -70,6 +73,10 @@ for annotation in annotations:
         cropped_im = img[ny: ny + size, nx: nx + size, :]
         resized_im = cv2.resize(cropped_im, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
 
+        try:
+            np.max(Iou)
+        except:
+            import pdb; pdb.set_trace()
         if np.max(Iou) < 0.3:
             # Iou with all gts must below 0.3
             save_file = os.path.join(neg_save_dir, "%s.jpg" % n_idx)
@@ -93,7 +100,7 @@ for annotation in annotations:
             continue
 
         # generate negative examples that have overlap with gt
-        for i in range(5):
+        for i in range(50):
             size = np.random.randint(img_size, min(width, height) / 2)
             # delta_x and delta_y are offsets of (x1, y1)
 
@@ -135,20 +142,19 @@ for annotation in annotations:
             crop_box = np.array([nx1, ny1, size, size])
 
             # offset_x1 = (x1 - nx1) / float(size)
-            offset_x1 = nx1 
-            _size / float(size)
+            offset_x1 = 0 if x1<nx1 else x1 - nx1
+            offset_x1 *= img_size / float(size)
             # offset_y1 = (y1 - ny1) / float(size)
-            offset_y1 = ny1 if y1<ny1 else y1
+            offset_y1 = 0 if y1<ny1 else y1 - ny1
             offset_y1 *= img_size / float(size)
             # offset_x2 = (x2 - nx2) / float(size)
-            offset_x2 = x2 if x2<nx2 else nx2
+            offset_x2 = x2 - nx1 if x2<nx2 else size
             offset_x2 *= img_size / float(size)
             # offset_y2 = (y2 - ny2) / float(size)
-            offset_y2 = y2 if y2<ny2 else ny2
+            offset_y2 = y2 - ny1 if y2<ny2 else size
             offset_y2 *= img_size / float(size)
             offset_w = offset_x2 - offset_x1
             offset_h = offset_y2 - offset_y1
-
 
             cropped_im = img[int(ny1): int(ny2), int(nx1): int(nx2), :]
             resized_im = cv2.resize(cropped_im, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
@@ -156,14 +162,12 @@ for annotation in annotations:
             box_ = box.reshape(1, -1)
             if IoU(crop_box, box_) >= 0.65:
                 # cv2.rectangle(img,(int(x1),int(y1)),(int(x2),int(y2)),(200,0,0),2) 
-                # cv2.imshow('face detector', img)
-                import pdb; pdb.set_trace()
-                
-                cv2.rectangle(resized_im,(int(offset_x1),int(offset_y1)),(int(offset_x2),int(offset_y2)),(200,0,0),2) 
-                cv2.imshow('face detector', resized_im)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                import pdb; pdb.set_trace()
+                # cv2.imshow('face detector', img)                
+                # cv2.rectangle(resized_im,(int(offset_x1),int(offset_y1)),(int(offset_x2),int(offset_y2)),(200,0,0),2) 
+                # cv2.imshow('face detector', resized_im)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+                # saveimport pdb; pdb.set_trace()
 
                 save_file = os.path.join(pos_save_dir, "%s.jpg" % p_idx)
                 f1.write(save_file + ' 1 %.2f %.2f %.2f %.2f\n' % (offset_x1, offset_y1, offset_w, offset_h))

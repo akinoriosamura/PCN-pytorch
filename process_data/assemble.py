@@ -6,8 +6,6 @@ import numpy as np
 def assemble_data(output_file, anno_file_list=[]):
 
     #assemble the pos, neg, part annotations to one file
-    size = 12
-
     if len(anno_file_list)==0:
         return 0
 
@@ -19,20 +17,11 @@ def assemble_data(output_file, anno_file_list=[]):
             print(anno_file)
             anno_lines = f.readlines()
 
-        base_num = 250000
-
-        if len(anno_lines) > base_num * 3:
-            idx_keep = npr.choice(len(anno_lines), size=base_num * 3, replace=True)
-        elif len(anno_lines) > 100000:
-            idx_keep = npr.choice(len(anno_lines), size=len(anno_lines), replace=True)
-        else:
-            idx_keep = np.arange(len(anno_lines))
-            np.random.shuffle(idx_keep)
         chose_count = 0
         with open(output_file, 'a+') as f:
-            for idx in idx_keep:
+            for anno_line in anno_lines:
                 # write lables of pos, neg, part images
-                f.write(anno_lines[idx])
+                f.write(anno_line)
                 chose_count+=1
 
     return chose_count
