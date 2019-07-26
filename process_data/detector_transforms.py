@@ -17,7 +17,7 @@ class Rescale(object):
         self.output_size = output_size
 
     def __call__(self, sample):
-        image, bbs = sample['image'], sample['bbs']
+        image, bboxes = sample['image'], sample['bboxes']
 
         h, w = image.shape[:2]
         new_h, new_w = self.output_size
@@ -26,14 +26,14 @@ class Rescale(object):
 
         img = cv2.resize(image, (new_h, new_w))
 
-        # h and w are swapped for bbs because for images,
+        # h and w are swapped for bboxes because for images,
         # x and y axes are axis 1 and 0 respectively
-        # bbs = bbs * [new_w / w, new_h / h]
+        # bboxes = bboxes * [new_w / w, new_h / h]
         x_scale = new_w / w
         y_scale = new_h / h
 
         newbb = []
-        for bb in bbs:
+        for bb in bboxes:
             # original frame as named values
             (origLeft, origTop, origWidth, origHeight) = bb
 
@@ -44,17 +44,17 @@ class Rescale(object):
             newbb.append([x, y, w, h])
         newbb = np.array(newbb)
 
-        return {'image': img, 'bbs': newbb}
+        return {'image': img, 'bboxes': newbb}
 
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
-        image, bbs = sample['image'], sample['bbs']
+        image, bboxes = sample['image'], sample['bboxes']
 
         # swap color axis because
         # numpy image: H x W x C
         # torch image: C X H X W
         image = image.transpose((2, 0, 1))
         return {'image': torch.from_numpy(image),
-                'bbs': torch.from_numpy(bbs)}
+                'bboxes': torch.from_numpy(bboxes)}

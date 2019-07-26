@@ -6,14 +6,14 @@ class PCNDetectorDataset(Dataset):
     """
     Face detector dataset processor
     params:
-        annotations: [ファイルパス, bbs]の行列
+        annotations: [ファイルパス, bboxes]の行列
             - imgpath: [
                 ['file path', 2, 24, 55, 466, ...], 
                 [], 
                 ...
                 ]
             - gt_cls: (-1, 0, 1)
-            - bbs: [[x1, y1, w, h], ...]
+            - bboxes: [[x1, y1, w, h], ...]
         transform: transform instance
             - batch を取るために、transformでrescaleは必要
     """
@@ -29,9 +29,9 @@ class PCNDetectorDataset(Dataset):
         img_name = annotation[0]
         image = cv2.imread(img_name)
         gt_cls = np.array([annotation[1]])
-        bbs = np.array([annotation[i:i+4] for i in range(2, len(annotation), 4)])
-        bbs = bbs.astype(np.float)
-        sample = {'image': image, 'gt_cls': gt_cls, 'bbs': bbs, 'theta': 0}
+        bboxes = np.array([annotation[i:i+4] for i in range(2, len(annotation), 4)])
+        bboxes = bboxes.astype(np.float)
+        sample = {'image': image, 'gt_cls': gt_cls, 'bboxes': bboxes, 'theta': 0}
 
         if self.transform:
             sample = self.transform(sample)
