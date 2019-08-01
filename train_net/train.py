@@ -1,11 +1,16 @@
-from pcn.image_reader import TrainImageReader
 import datetime
 import os
-from pcn.models import PCN1,PCN2,PCN3,LossFn
 import torch
+from torchvision import transforms
 from torch.autograd import Variable
+from torch.utils.data import DataLoader
 import mtcnn.core.image_tools as image_tools
 import numpy as np
+
+from pcn.image_reader import TrainImageReader
+from pcn.models import PCN1, PCN2, PCN3, LossFn
+from process_data.data_loador import PCNDetectorDataset
+from process_data.data_transformers import ToTensor
 
 
 def compute_accuracy(prob_cls, gt_cls):
@@ -39,48 +44,53 @@ def pcn1(model_store_path, end_epoch, annotation_file,
 
     if use_cuda:
         net.cuda()
-    optimizer = torch.optim.Adam(net.parameters(), lr=base_lr)
+    # optimizer = torch.optim.Adam(net.parameters(), lr=base_lr)
+    optimizer = torch.optim.SGD(net.parameters(), lr=base_lr)
 
     # preprocess for dataset
-    annotation_file = annotation_file
-    assert os.path.exists(annotation_file), 'Path does not exist: {}'.format(self.annotation_file)
+    assert os.path.exists(annotation_file), 'Path does not exist: {}'.format(annotation_file)
     annotations = []
     with open(annotation_file, 'r') as f:
         annotations_set = f.readlines()
     annotations = [annotation.rstrip().split(" ") for annotation in annotations_set]
 
-    # get dataset applyin transform
+    # get dataset applied transform
     data_transform = transforms.Compose([
-        Rescale((224, 224)),
         ToTensor()
     ])
-    face_dataset = FaceDetectorDataset(annotations, data_transform)
-
+    face_dataset = PCNDetectorDataset(annotations, data_transform)
     dataloader = DataLoader(face_dataset, batch_size=2, shuffle=True)
 
     frequent = 10
     for cur_epoch in range(1,end_epoch+1):
         # train_data.reset() # shuffle
 
-        for batch_idx,(image, gt_bbox)in enumerate(dataloader):
-            im_tensor = Variable(im_tensor)
-            gt_bbox = Variable(gt_bbox)
+        for batch_idx, batches in enumerate(dataloader):
+            img = batches['image']
+            gt_cls = batches['gt_cls']
+            bboxes = batches['bboxes']
+            thetas = batches['thetas']
+            im_tensor = Variable(img)
+            gt_cls = Variable(gt_cls)
+            gt_bbox = Variable(bboxes)
+            gt_theta = Variable(thetas)
 
             if use_cuda:
                 im_tensor = im_tensor.cuda()
+                gt_cls = gt_cls.cuda()
                 gt_bbox = gt_bbox.cuda()
+                gt_theta = gt_theta.cuda()
 
-            cls_pred, rotate, bbox = net(im_tensor)
-            # cls_pred, box_offset_pred = net(im_tensor)
-            # all_loss, cls_loss, offset_loss = lossfn.loss(gt_label=label_y,gt_offset=bbox_y, pred_label=cls_pred, pred_offset=box_offset_pred)
+            cls_pred, theta, bbox = net(im_tensor)
 
-            cls_loss = lossfn.cls_loss(gt_label, cls_pred)
-            box_offset_loss = lossfn.box_loss(gt_label, gt_bbox, bbox)
+            cls_loss = lossfn.cls_loss(gt_cls, cls_pred)
+            box_offset_loss = lossfn.box_loss(gt_cls, gt_bbox, bbox)
+            theta_loss = lossfn.theta_loss(gt_cls, gt_theta, theta)
 
-            all_loss = cls_loss*1.0+box_offset_loss*0.5
+            all_loss = cls_loss*1.0 + box_offset_loss*0.5 + theta_loss*0.5
 
             if batch_idx % frequent==0:
-                accuracy=compute_accuracy(cls_pred,gt_label)
+                accuracy=compute_accuracy(cls_pred, gt_cls)
 
                 show1 = accuracy.data.cpu().numpy()
                 show2 = cls_loss.data.cpu().numpy()

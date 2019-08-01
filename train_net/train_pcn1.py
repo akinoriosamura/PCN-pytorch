@@ -5,9 +5,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data_loador import FaceDetectorDataset
+from ../process_data.data_loador import FaceDetectorDataset
 
-annotation_file = './dataset/face_detection/WIDERFACE/anno_train.txt'
+annotation_file = './dataset/anno_store/imglist_anno_24.txt'
 model_store_path = './saved_models'
 end_epoch = 10
 # show time of tranining process for debug

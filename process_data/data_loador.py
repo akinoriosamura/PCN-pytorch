@@ -28,10 +28,15 @@ class PCNDetectorDataset(Dataset):
         annotation = self.annotations[idx]
         img_name = annotation[0]
         image = cv2.imread(img_name)
-        gt_cls = np.array([annotation[1]])
-        bboxes = np.array([annotation[i:i+4] for i in range(2, len(annotation), 4)])
+        gt_cls = np.array([annotation[1]]).astype(float)
+        #if gt_cls[0] != 0:
+        bboxes = np.array([annotation[i:i+4] for i in range(2, len(annotation)-3, 4)])
         bboxes = bboxes.astype(np.float)
-        sample = {'image': image, 'gt_cls': gt_cls, 'bboxes': bboxes, 'theta': 0}
+        thetas = np.array([annotation[-3:]]).astype(float)
+        #else:
+        #    bboxes = np.array([])
+        #    thetas = np.array([])
+        sample = {'image': image, 'gt_cls': gt_cls, 'bboxes': bboxes, 'thetas': thetas}
 
         if self.transform:
             sample = self.transform(sample)

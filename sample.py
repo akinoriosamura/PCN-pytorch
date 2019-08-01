@@ -60,6 +60,6 @@ visualize(annotations, category_id_to_name, "default")
 
 # aug = get_aug([VerticalFlip(p=1)])
 import pdb; pdb.set_trace()
-aug = get_aug([Rotate(limit=(-90,-90), p=1)])
+aug = get_aug([Rotate(limit=(40,40), p=1)])
 augmented = aug(**annotations)
 visualize(augmented, category_id_to_name, "rotate")

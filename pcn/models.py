@@ -11,56 +11,70 @@ def weight_init(m):
 
 
 class LossFn:
-    def __init__(self, cls_factor=1, box_factor=1, rotate_factor=1):
+    def __init__(self, cls_factor=1, box_factor=1, theta_factor=1):
         # loss function weight
         self.cls_factor = cls_factor
         self.box_factor = box_factor
-        self.rotate_factor = rotate_factor
+        self.theta_factor = theta_factor
         # loss function
         self.loss_cls = nn.BCELoss() # binary cross entropy
-        self.loss_box = nn.MSELoss() # mean square error
-        self.loss_rotate = nn.MSELoss()
+        # TODO: robust smooth l1 loss: 要チエック(論文とpytorch smooth l1 lossが一緒ではある)
+        self.loss_box = nn.SmoothL1Loss() # smooth l1 loss
+        self.loss_theta_1 = nn.BCELoss() # binary cross entropy
 
 
-    def cls_loss(self,gt_label,pred_label):
-        pred_label = torch.squeeze(pred_label)
-        gt_label = torch.squeeze(gt_label)
+    def cls_loss(self, gt_cls, pred_cls):
+        """
+        gt_clsが0 or 1のclsに関してloss計算
+        """
+        pred_cls = torch.squeeze(pred_cls)
+        gt_cls = torch.squeeze(gt_cls)
         # get the mask element which >= 0, only 0 and 1 can effect the detection loss
-        mask = torch.ge(gt_label,0)
-        valid_gt_label = torch.masked_select(gt_label,mask)
-        valid_pred_label = torch.masked_select(pred_label,mask)
-        return self.loss_cls(valid_pred_label,valid_gt_label)*self.cls_factor
+        # 0より小さいラベルをmask
+        mask = torch.ge(gt_cls,0)
+        valid_gt_cls = torch.masked_select(gt_cls,mask)
+        valid_pred_cls = torch.masked_select(pred_cls,mask)
+        return self.loss_cls(valid_pred_cls, valid_gt_cls) * self.cls_factor
 
 
-    def box_loss(self,gt_label,gt_offset,pred_offset):
-        pred_offset = torch.squeeze(pred_offset)
-        gt_offset = torch.squeeze(gt_offset)
-        gt_label = torch.squeeze(gt_label)
+    def box_loss(self, gt_cls, gt_box, pred_box):
+        """
+        gt_clsが-1 or 1のbbに関してloss計算
+        """
+        pred_box = torch.squeeze(pred_box)
+        gt_box = torch.squeeze(gt_box)
+        gt_cls = torch.squeeze(gt_cls)
 
         #get the mask element which != 0
-        unmask = torch.eq(gt_label,0)
+        unmask = torch.eq(gt_cls,0)
         mask = torch.eq(unmask,0)
         #convert mask to dim index
         chose_index = torch.nonzero(mask.data)
         chose_index = torch.squeeze(chose_index)
         #only valid element can effect the loss
-        valid_gt_offset = gt_offset[chose_index,:]
-        valid_pred_offset = pred_offset[chose_index,:]
-        return self.loss_box(valid_pred_offset,valid_gt_offset)*self.box_factor
+        valid_gt_box = gt_box[chose_index,:]
+        valid_pred_box = pred_box[chose_index,:]
+        return self.loss_box(valid_pred_box, valid_gt_box) * self.box_factor
 
 
-    def landmark_loss(self,gt_label,gt_landmark,pred_landmark):
-        pred_landmark = torch.squeeze(pred_landmark)
-        gt_landmark = torch.squeeze(gt_landmark)
-        gt_label = torch.squeeze(gt_label)
-        mask = torch.eq(gt_label,-2)
+    def theta_loss(self, gt_cls, gt_theta, pred_theta):
+        """
+        gt_clsが-1 or 1のthetaに関してloss計算
+        """
+        pred_theta = torch.squeeze(pred_theta)
+        gt_theta = torch.squeeze(gt_theta)
+        gt_cls = torch.squeeze(gt_cls)
 
-        chose_index = torch.nonzero(mask.data)
+        #get the mask element which != 0
+        unmask = torch.eq(gt_cls,0) # if gt_cls == 0, then unmask = 1
+        mask = torch.eq(unmask,0) # if unmask == 0, then mask = 1 -> if gt_cls != 0, then mask = 1
+        #convert mask to dim index
+        chose_index = torch.nonzero(mask.data) # get index of mask != 0 -> gt_cls != 0
         chose_index = torch.squeeze(chose_index)
-
-        valid_gt_landmark = gt_landmark[chose_index, :]
-        valid_pred_landmark = pred_landmark[chose_index, :]
-        return self.loss_landmark(valid_pred_landmark,valid_gt_landmark)*self.land_factor
+        #only valid element can effect the loss
+        valid_gt_theta = gt_theta[chose_index,:]
+        valid_pred_theta = pred_theta[chose_index,:]
+        return self.loss_theta_1(valid_pred_theta, valid_gt_theta) * self.theta_factor
 
 
 class PCN1(nn.Module):

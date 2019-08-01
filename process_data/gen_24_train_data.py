@@ -13,7 +13,8 @@ import random
 sys.path.append(os.getcwd())
 import albumentations as al
 
-from process_data.utils import IoU
+from process_data.utils import IoU, get_thetas
+
 
 prefix = ''
 anno_file = "./dataset/anno_store/anno_train.txt"
@@ -61,26 +62,7 @@ for annotation in annotations[:10]:
     # 1画像あたり10setのrotateデータ作成
     for i in range(10):
         theta = random.randint(-180, 180)
-        # get stage1 theta label
-        if theta < -90 or 90 < theta:
-            th_1 = 180
-            th_2 = np.nan
-            th_3 = np.nan
-        else:
-            th_1 = 0
-            # get stage2 theta label
-            if theta < -45:
-                th_2 = 90
-                th_3 = np.nan
-            elif theta > 45:
-                th_2 = -90
-                th_3 = np.nan
-            else:
-                th_2 = 0
-                # get stage3 theta label
-                if -45 <= theta <= 45:
-                    th_3 = theta
-        thetas = [th_1, th_2, th_3]
+        thetas = get_thetas(theta)
         print("theta: ", theta)
         print("thetas: ", thetas)
         bboxes = np.array(bbox, dtype=np.int32).reshape(-1, 4)
@@ -122,7 +104,9 @@ for annotation in annotations[:10]:
             if np.max(Iou) < 0.3:
                 # Iou with all gts must below 0.3
                 save_file = os.path.join(neg_save_dir, "%s.jpg" % n_idx)
-                f2.write(save_file + ' 0\n')
+                # f2.write(save_file + ' 0\n')
+                f2.write(save_file + ' 0 %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n' % (np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan))
+
                 cv2.imwrite(save_file, resized_im)
                 n_idx += 1
                 neg_num += 1
@@ -162,7 +146,8 @@ for annotation in annotations[:10]:
                 if np.max(Iou) < 0.3:
                     # Iou with all gts must below 0.3
                     save_file = os.path.join(neg_save_dir, "%s.jpg" % n_idx)
-                    f2.write(save_file + ' 0\n')
+                    # f2.write(save_file + ' 0\n')
+                    f2.write(save_file + ' 0 %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n' % (np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan))
                     cv2.imwrite(save_file, resized_im)
                     n_idx += 1
 
@@ -209,7 +194,7 @@ for annotation in annotations[:10]:
                 if IoU(crop_box, box_) >= 0.65:
                     # cv2.rectangle(aug_img,(int(x1),int(y1)),(int(x2),int(y2)),(200,0,0),2) 
                     # cv2.imshow('face detector', aug_img)                
-                    # cv2.rectangle(resized_im,(int(offset_x1),int(offset_y1)),(int(offset_x2),int(offset_y2)),(200,0,0),2) 
+                    # cv2.rectangle(resized_im,(int(offset_x1),int(offset_y1)),(int(offset_x2),int(offset_y2)),(200,0,0),1) 
                     # cv2.imshow('face detector', resized_im)
                     # cv2.waitKey(0)
                     # cv2.destroyAllWindows()

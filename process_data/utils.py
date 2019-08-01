@@ -72,3 +72,52 @@ def convert_to_square(bbox):
     square_bbox[:, 2] = square_bbox[:, 0] + max_side - 1
     square_bbox[:, 3] = square_bbox[:, 1] + max_side - 1
     return square_bbox
+
+
+def get_thetas(theta):
+    """
+    get theta label
+    stage1: 
+        0: 0° (-90 <= theta <= 90)
+        1: 180° (-180 <= theta < -90, 90 < theta <= 180)
+    stage2:
+        0: 90° (-90 <= theta < -45)
+        1: 0° (-45 <= theta <= 45)
+        2: -90° (45 < theta <= 90)
+    stage3:
+        θ = theta
+    """
+    if -90 <= theta <= 90:
+        th_1 = 0
+        rotated_theta_1 = theta
+        if rotated_theta_1 < -45:
+            th_2 = 0
+            rotated_theta_2 = rotated_theta_1 + 90
+            th_3 = rotated_theta_2
+        elif -45 <= rotated_theta_1 <= 45:
+            th_2 = 1
+            rotated_theta_2 = rotated_theta_1
+            th_3 = rotated_theta_2
+        else:
+            th_2 = 2
+            rotated_theta_2 = rotated_theta_1 - 90
+            th_3 = rotated_theta_2
+    else:
+        th_1 = 1
+        rotated_theta_1 = theta + 180 if theta < -90 else theta - 180
+        if rotated_theta_1 < -45:
+            th_2 = 0
+            rotated_theta_2 = rotated_theta_1 + 90
+            th_3 = rotated_theta_2
+        elif -45 <= rotated_theta_1 <= 45:
+            th_2 = 1
+            rotated_theta_2 = rotated_theta_1
+            th_3 = rotated_theta_2
+        else:
+            th_2 = 2
+            rotated_theta_2 = rotated_theta_1 - 90
+            th_3 = rotated_theta_2
+
+    thetas = [th_1, th_2, th_3]
+
+    return thetas

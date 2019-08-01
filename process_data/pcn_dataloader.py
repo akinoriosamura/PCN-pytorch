@@ -53,24 +53,11 @@ class Rescale(object):
         return {'image': img, 'bboxes': newbb}
 """
 
-class Rotate(object):
+class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
-    def __init__(self, min_area=0., min_visibility=0.):
-        self.aug = al.Compose(
-            al.Rotate(limit=180, p=1),
-            bbox_params={
-                'format': 'coco',
-                'min_area': min_area,
-                'min_visibility': min_visibility,'label_fields': ['category_id']
-                }
-            )
 
     def __call__(self, sample):
-        image, gt_cls, bboxes, theta = sample['image'], sample['gt_cls'], sample['bboxes'], sample['theta']
-        sample['category_id'] = np.array(range(len(bboxes)))
-        category_id_to_name = {}
-        for i in range(len(bboxes)):
-            category_id_to_name[i] = 'face'
+        image, gt_cls, bboxes, thetas = sample['image'], sample['gt_cls'], sample['bboxes'], sample['thetas']
 
         # swap color axis because
         # numpy image: H x W x C
@@ -79,30 +66,15 @@ class Rotate(object):
         return {'image': torch.from_numpy(image),
                 'gt_cls': torch.from_numpy(gt_cls),
                 'bboxes': torch.from_numpy(bboxes),
-                'theta': torch.from_numpy(theta)}
-
-class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample):
-        image, gt_cls, bboxes = sample['image'], sample['gt_cls'], sample['bboxes']
-
-        # swap color axis because
-        # numpy image: H x W x C
-        # torch image: C X H X W
-        image = image.transpose((2, 0, 1))
-        return {'image': torch.from_numpy(image),
-                'gt_cls': torch.from_numpy(gt_cls),
-                'bboxes': torch.from_numpy(bboxes)}
+                'thetas': torch.from_numpy(thetas)}
 
 # preprocess for dataset
-annotation_file = './dataset/face_detection/WIDERFACE/anno_train.txt'
-assert os.path.exists(annotation_file), 'Path does not exist: {}'.format(self.annotation_file)
+annotation_file = './dataset/anno_store/imglist_anno_24.txt'
+assert os.path.exists(annotation_file), 'Path does not exist: {}'.format(annotation_file)
 annotations = []
 with open(annotation_file, 'r') as f:
     annotations_set = f.readlines()
 annotations = [annotation.rstrip().split(" ") for annotation in annotations_set]
-
 
 # get dataset applyin transform
 data_transform = transforms.Compose([
@@ -110,24 +82,27 @@ data_transform = transforms.Compose([
 ])
 face_dataset = PCNDetectorDataset(annotations, data_transform)
 
-"""
-# tensor cannot has key
-for i in range(len(face_dataset)):
-    img = face_dataset[i]["image"]
-    bboxes = face_dataset[i]["bboxes"]
-    for bb in bboxes:
-        cv2.rectangle(img, (bb[0], bb[1]), (bb[0]+bb[2], bb[1]+bb[3]), (255, 0, 0))
-    cv2.imwrite(os.path.join("sample_processed", str(i) + ".jpg"), img)
-    if i == 10:
-        break
-"""
-
-
-dataloader = DataLoader(face_dataset, batch_size=2, shuffle=True)
+dataloader = DataLoader(face_dataset, batch_size=1, shuffle=True)
 
 for i_batch, sample_batched in enumerate(dataloader):
-    print(i_batch, sample_batched['image'].size(),
-          sample_batched['bboxes'].size())
-
-    if i_batch == 3:
+    print(i_batch, sample_batched['image'].size(), sample_batched['gt_cls'], sample_batched['bboxes'], sample_batched['thetas'])
+    # print(i_batch, sample_batched['image'].size(), sample_batched['gt_cls'].size(), sample_batched['bboxes'].size(), sample_batched['thetas'].size())
+    if i_batch == 5:
         break
+
+# tensor cannot has key
+for i in range(len(face_dataset)):
+    # import pdb; pdb.set_trace()
+    img = face_dataset[i]["image"].numpy()
+    img = img.transpose((1, 2, 0))
+    print(img.shape)
+    bboxes = face_dataset[i]["bboxes"].numpy()
+    print("cls: ", face_dataset[i]["gt_cls"].numpy())
+    print("thetas: ", face_dataset[i]["thetas"].numpy())
+    print(bboxes)
+    if not np.isnan(bboxes[0][0]):
+        for bb in bboxes:
+            cv2.rectangle(img, (int(bb[0]), int(bb[1])), (int(bb[0]+bb[2]), int(bb[1]+bb[3])), (200, 0, 0), 1)
+        cv2.imwrite(os.path.join("sample_processed", str(i) + ".jpg"), img)
+        if i == 5:
+            break
